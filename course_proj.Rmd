@@ -1,0 +1,79 @@
+---
+title: "Course_Project"
+output: html_document
+---
+***
+
+### Analysis
+#### Summary of Steps
+1. Load the data set and learn about it from its summary
+2. Use cross-validation; 70% of the  data is used for training while the remaining 30% of  is used for testing.
+3. Due to the large number of variables, clean the data by 1) excluding variables which might not be explanatory variables, and 2) reducing variables with little information.
+4. Apply PCA to reduce the number of variables.
+5. Build a model using the random forest method.
+6. Use the testing data set to test the model.
+7. Apply the model to estimate classes of 20 observations
+
+### Load the data
+```{r, results="hide"}
+data <- read.csv("pml-training.csv")
+colnames(data)
+summary(data)
+```
+### Cross validation
+##### use 70% of training set data to built a model, and use the rest to test the model
+```{r, results="hide"}
+library(caret)
+set.seed(1001)
+train <- createDataPartition(y=data$classe,p=.70,list=F)
+training <- data[train,]
+testing <- data[-train,]
+```
+
+### Cleaning the training data
+```{r, results="hide"}
+#exclude the identifier, timestamp, and window data 
+Cl <- grep("name|timestamp|window|X", colnames(training), value=F) 
+trainingCl <- training[,-Cl]
+#find the variables with high (over 95%) missing data to exclude  from the analysis
+trainingCl[trainingCl==""] <- NA
+NArate <- apply(trainingCl, 2, function(x) sum(is.na(x)))/nrow(trainingCl)
+trainingCl <- trainingCl[!(NArate>0.95)]
+summary(trainingCl)
+```
+### PCA
+##### Apply PCA to reduce the number of variables
+```{r}
+preProc <- preProcess(trainingCl[,1:52],method="pca",pcaComp=25) 
+trainingPC <- predict(preProc,trainingCl[,1:52])
+```
+### Random forest
+##### Apply ramdom forest method (non-bionominal outcome & large sample size)
+```{r}
+library(randomForest)
+modFitRF <- randomForest(trainingCl$classe ~ .,   data=trainingPC, do.trace=F)
+print(modFitRF) # view results 
+importance(modFitRF) # importance of each predictor
+```
+### Check with test set
+```{r}
+testingCl <- testing[,-Cl]
+testingCl[testingCl==""] <- NA
+NArate <- apply(testingCl, 2, function(x) sum(is.na(x)))/nrow(testingCl)
+testingCl <- testingCl[!(NArate>0.95)]
+testingPC <- predict(preProc,testingCl[,1:52])
+confusionMatrix(testingCl$classe,predict(modFitRF,testingPC))
+```
+### Predict classes of 20 test data
+```{r}
+library(e1071)
+testdata <- read.csv("pml-testing.csv")
+testdataCl <- testdata[,-Cl]
+testdataCl[testdataCl==""] <- NA
+NArate <- apply(testdataCl, 2, function(x) sum(is.na(x)))/nrow(testdataCl)
+testdataCl <- testdataCl[!(NArate>0.95)]
+testdataPC <- predict(preProc,testdataCl[,1:52])
+testdataCl$classe <- predict(modFitRF,testdataPC)
+```
+### Discussion
+##### This is an analysis of 19622 observations from a weight lifitng exercise data set. Out of these, 70% were used as a training set and the remaining as a test set for cross validation. The model chosen is the random forest model. The model had a 97% accuracy for the test set. The sensitivity was in between 92%-99% and the specificity was over 99% for all classes (class A-E, total 5 classes. The data used here suffesr from being limited to only 6 participants using Microsoft Kinect, which might affect the perfromance if used on a rather different data set.
